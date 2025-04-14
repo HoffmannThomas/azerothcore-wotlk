@@ -9,6 +9,8 @@ services:
   ac-database:
     container_name: ac-database
     image: mysql:8.4
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     networks:
       - ac-network
     ports:
@@ -29,6 +31,8 @@ services:
   ac-db-import:
     container_name: ac-db-import
     image: acore/ac-wotlk-db-import:${DOCKER_IMAGE_TAG:-master}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     networks:
       - ac-network
     build:
@@ -56,6 +60,8 @@ services:
   ac-worldserver:
     container_name: ac-worldserver
     image: acore/ac-wotlk-worldserver:${DOCKER_IMAGE_TAG:-master}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     build:
       context: .
       target: worldserver
@@ -97,6 +103,8 @@ services:
   ac-authserver:
     container_name: ac-authserver
     image: acore/ac-wotlk-authserver:${DOCKER_IMAGE_TAG:-master}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     build:
       context: .
       target: authserver
@@ -130,6 +138,8 @@ services:
   ac-client-data-init:
     container_name: ac-client-data-init
     image: acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     build:
       context: .
       target: client-data

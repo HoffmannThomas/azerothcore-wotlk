@@ -1172,6 +1172,7 @@ public:
     [[nodiscard]] bool isAcceptWhispers() const { return m_ExtraFlags & PLAYER_EXTRA_ACCEPT_WHISPERS; }
     void SetAcceptWhispers(bool on) { if (on) m_ExtraFlags |= PLAYER_EXTRA_ACCEPT_WHISPERS; else m_ExtraFlags &= ~PLAYER_EXTRA_ACCEPT_WHISPERS; }
     [[nodiscard]] bool IsGameMaster() const { return m_ExtraFlags & PLAYER_EXTRA_GM_ON; }
+    [[nodiscard]] bool CanBeGameMaster() const;
     void SetGameMaster(bool on);
     [[nodiscard]] bool isGMChat() const { return m_ExtraFlags & PLAYER_EXTRA_GM_CHAT; }
     void SetGMChat(bool on) { if (on) m_ExtraFlags |= PLAYER_EXTRA_GM_CHAT; else m_ExtraFlags &= ~PLAYER_EXTRA_GM_CHAT; }
@@ -1393,7 +1394,8 @@ public:
     [[nodiscard]] TradeData* GetTradeData() const { return m_trade; }
     void TradeCancel(bool sendback, TradeStatus status = TRADE_STATUS_TRADE_CANCELED);
 
-    CinematicMgr* GetCinematicMgr() const { return _cinematicMgr; }
+    CinematicMgr& GetCinematicMgr() { return _cinematicMgr; }
+    CinematicMgr const& GetCinematicMgr() const { return _cinematicMgr; }
 
     void UpdateEnchantTime(uint32 time);
     void UpdateSoulboundTradeItems();
@@ -1826,6 +1828,7 @@ public:
     uint32 GetLastPotionId() { return m_lastPotionId; }
     void SetLastPotionId(uint32 item_id) { m_lastPotionId = item_id; }
     void UpdatePotionCooldown(Spell* spell = nullptr);
+    void AtExitCombat() override;
 
     void setResurrectRequestData(ObjectGuid guid, uint32 mapId, float X, float Y, float Z, uint32 health, uint32 mana)
     {
@@ -2311,7 +2314,7 @@ public:
     [[nodiscard]] TeamId GetBgTeamId() const { return m_bgData.bgTeamId != TEAM_NEUTRAL ? m_bgData.bgTeamId : GetTeamId(); }
 
     void LeaveBattleground(Battleground* bg = nullptr);
-    [[nodiscard]] bool CanJoinToBattleground() const;
+    [[nodiscard]] bool CanJoinToBattleground(Battleground const* bg) const;
     bool CanReportAfkDueToLimit();
     void ReportedAfkBy(Player* reporter);
     void ClearAfkReports() { m_bgData.bgAfkReporter.clear(); }
@@ -2383,6 +2386,7 @@ public:
     WorldObject* GetSeer() const { return m_seer; }
     void SetViewpoint(WorldObject* target, bool apply);
     [[nodiscard]] WorldObject* GetViewpoint() const;
+    Position const& GetSightPosition() const;
     void StopCastingCharm(Aura* except = nullptr);
     void StopCastingBindSight(Aura* except = nullptr);
 
@@ -2578,6 +2582,7 @@ public:
 
     //bool isActiveObject() const { return true; }
     bool CanSeeSpellClickOn(Creature const* creature) const;
+    [[nodiscard]] bool CanSeeObjectByVisibilityConditions(WorldObject const* object) const;
     [[nodiscard]] bool CanSeeVendor(Creature const* creature) const;
     [[nodiscard]] bool CanSeeTrainer(Creature const* creature) const;
 
@@ -2977,7 +2982,7 @@ private:
     Item* _StoreItem(uint16 pos, Item* pItem, uint32 count, bool clone, bool update);
     Item* _LoadItem(CharacterDatabaseTransaction trans, uint32 zoneId, uint32 timeDiff, Field* fields);
 
-    CinematicMgr* _cinematicMgr;
+    CinematicMgr _cinematicMgr;
 
     typedef GuidSet RefundableItemsSet;
     RefundableItemsSet m_refundableItems;

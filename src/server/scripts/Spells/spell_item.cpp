@@ -17,6 +17,7 @@
 
 #include "AreaDefines.h"
 #include "Battleground.h"
+#include "DBCStores.h"
 #include "ObjectMgr.h"
 #include "Pet.h"
 #include "Player.h"
@@ -189,9 +190,18 @@ enum Heartpierce
     SPELL_INVIGORATION_MANA_HERO    = 71888
 };
 
+enum MeteoricInspiration
+{
+    SPELL_PENANCE_R1_HEAL_CHANNEL           = 47757,
+    SPELL_PENANCE_R1_DAMAGE_CHANNEL         = 47758,
+    SPELL_BEACON_OF_LIGHT_HOLY_LIGHT        = 53652,
+    SPELL_BEACON_OF_LIGHT_FLASH_OF_LIGHT    = 53653,
+    SPELL_BEACON_OF_LIGHT_HOLY_SHOCK        = 53654
+};
+
 enum MarkOfConquest
 {
-    SPELL_MARK_OF_CONQUEST_ENERGIZE = 33671
+    SPELL_MARK_OF_CONQUEST_ENERGIZE = 39599
 };
 
 enum PersistentShieldMisc
@@ -309,44 +319,73 @@ class spell_item_titanium_seal_of_dalaran : public SpellScript
     }
 };
 
-enum AmplifyDish
+// 13180 - Gnomish Mind Control Cap
+// 67799 - Mind Amplification Dish
+enum AmplificationDish
 {
-    SPELL_AMPLIFY_30S               = 13180,
-    SPELL_AMPLIFY_10S               = 67799,
-    SPELL_MENTAL_BATTLE             = 67810,
-    SPELL_AMPLIFY_CHARM_30S         = 13181,
-    SPELL_AMPLIFY_CHARM_10S         = 26740,
+    SPELL_MIND_CONTROL_CAP             = 13180, // Gnomish Mind Control cap
+    SPELL_AMPLIFICATION_DISH           = 67799, // Mind Amplification Dish
+    SPELL_MENTAL_BATTLE                = 67810,
+    SPELL_MIND_CONTROL_CAP_CHARM_30S   = 13181,
+    SPELL_MIND_CONTROL_CAP_CHARM_10S   = 26740,
+    SPELL_DULLARD                      = 67809,
 };
 
 class spell_item_mind_amplify_dish : public SpellScript
 {
     PrepareSpellScript(spell_item_mind_amplify_dish)
 
+    bool Load() override
+    {
+        return GetCastItem() != nullptr;
+    }
+
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_MIND_CONTROL_CAP_CHARM_10S, SPELL_MIND_CONTROL_CAP_CHARM_30S, SPELL_DULLARD, SPELL_MENTAL_BATTLE });
+    }
+
     void OnDummyEffect(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
 
         Unit* caster = GetCaster();
-        if (Player* player = caster->ToPlayer())
+        Unit* target = GetHitUnit();
+        if (!caster || !target)
+            return;
+
+        // little protection
+        if (target->ToCreature() && target->ToCreature()->GetCreatureTemplate()->rank > CREATURE_ELITE_NORMAL)
+                return;
+
+        uint32 charmSpell = GetSpellInfo()->Id == SPELL_AMPLIFICATION_DISH ? SPELL_MIND_CONTROL_CAP_CHARM_10S : SPELL_MIND_CONTROL_CAP_CHARM_30S;
+
+        // 5% of the time - Backfire
+        // 65% of the time - Successful Mind Control.
+        // 30% of the time - Unsuccessful Mind Control.
+        int32 backfire = 5;
+        int32 failure = 30;
+
+        // Increased chance of failure when used against targets over level 60.
+        bool isIncreasedChanceOfFailure = GetSpellInfo()->Id == SPELL_MIND_CONTROL_CAP && target->GetLevel() > 60;
+        if (isIncreasedChanceOfFailure)
         {
-            if (Unit* target = GetHitUnit())
-            {
-                // little protection
-                if (target->ToCreature())
-                    if (target->ToCreature()->GetCreatureTemplate()->rank > CREATURE_ELITE_NORMAL)
-                        return;
-
-                if (GetSpellInfo()->Id != SPELL_AMPLIFY_10S)
-                    if (target->GetLevel() > 60)
-                        return;
-
-                uint8 pct = std::max(0, 20 + player->GetLevel() - target->GetLevel());
-                if (roll_chance_i(pct))
-                    player->CastSpell(target, SPELL_MENTAL_BATTLE, true);
-                else if (roll_chance_i(pct))
-                    player->CastSpell(target, GetSpellInfo()->Id == SPELL_AMPLIFY_10S ? SPELL_AMPLIFY_CHARM_10S : SPELL_AMPLIFY_CHARM_30S, true);
-            }
+            backfire = 20; // not verified
+            failure = 45; // not verified
         }
+
+        int32 roll = irand(0, 99);
+        if (roll < backfire)
+            target->CastSpell(caster, charmSpell, true, GetCastItem());
+        else if (roll < backfire + failure)
+        {
+            if (roll_chance_i(50)) // not verified
+                caster->CastSpell(target, SPELL_MENTAL_BATTLE, true, GetCastItem());
+            else
+                caster->CastSpell(caster, SPELL_DULLARD, true, GetCastItem());
+        }
+        else // success
+            caster->CastSpell(target, charmSpell, true, GetCastItem());
     }
 
     void Register() override
@@ -532,15 +571,31 @@ class spell_item_toy_train_set : public SpellScript
 {
     PrepareSpellScript(spell_item_toy_train_set)
 
+    void FilterTargets(std::list<WorldObject*>& targets)
+    {
+        targets.remove_if([](WorldObject const* target) { return !target->IsPlayer(); });
+    }
+
     void HandleScriptEffect(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        if (Unit* target = GetHitUnit())
-            target->HandleEmoteCommand(EMOTE_ONESHOT_TRAIN);
+        Player* target = GetHitPlayer();
+        if (!target)
+            return;
+
+        target->HandleEmoteCommand(EMOTE_ONESHOT_TRAIN);
+
+        // EmotesTextSound.dbc holds the per race/gender "choo choo" voice line. SMSG_EMOTE only carries
+        // the animation, and EMOTE_ONESHOT_TRAIN is not enough for the client to pick the sound itself.
+        uint8 const race = target->getRace();
+        uint8 const gender = target->getGender();
+        if (EmotesTextSoundEntry const* soundEntry = FindTextSoundEmoteFor(TEXT_EMOTE_TRAIN, race, gender))
+            target->PlayDistanceSound(soundEntry->SoundId);
     }
 
     void Register() override
     {
+        OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_item_toy_train_set::FilterTargets, EFFECT_ALL, TARGET_UNIT_SRC_AREA_ALLY);
         OnEffectHitTarget += SpellEffectFn(spell_item_toy_train_set::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
@@ -787,27 +842,25 @@ class spell_item_feast : public SpellScript
         Unit* caster = GetCaster();
         if (Player* player = caster->ToPlayer())
         {
-            LocaleConstant loc_idx = player->GetSession()->GetSessionDbLocaleIndex();
-
+            uint32 textId = 0;
             switch (GetSpellInfo()->Id)
             {
                 case SPELL_GREAT_FEAST:
-                    if (BroadcastText const* bct = sObjectMgr->GetBroadcastText(GREAT_FEAST_BROADCAST_TEXT_ID_PREPARE))
-                        player->TextEmote(bct->GetText(loc_idx, player->getGender()), player);
+                    textId = GREAT_FEAST_BROADCAST_TEXT_ID_PREPARE;
                     break;
                 case SPELL_FISH_FEAST:
-                    if (BroadcastText const* bct = sObjectMgr->GetBroadcastText(FISH_FEAST_BROADCAST_TEXT_ID_PREPARE))
-                        player->TextEmote(bct->GetText(loc_idx, player->getGender()), player);
+                    textId = FISH_FEAST_BROADCAST_TEXT_ID_PREPARE;
                     break;
                 case SPELL_SMALL_FEAST:
-                    if (BroadcastText const* bct = sObjectMgr->GetBroadcastText(SMALL_FEAST_BROADCAST_TEXT_ID_PREPARE))
-                        player->TextEmote(bct->GetText(loc_idx, player->getGender()), player);
+                    textId = SMALL_FEAST_BROADCAST_TEXT_ID_PREPARE;
                     break;
                 case SPELL_GIGANTIC_FEAST:
-                    if (BroadcastText const* bct = sObjectMgr->GetBroadcastText(GIGANTIC_FEAST_BROADCAST_TEXT_ID_PREPARE))
-                        player->TextEmote(bct->GetText(loc_idx, player->getGender()), player);
+                    textId = GIGANTIC_FEAST_BROADCAST_TEXT_ID_PREPARE;
+                    break;
+                default:
                     break;
             }
+            player->Unit::TextEmote(textId, player);
         }
     }
 
@@ -3283,41 +3336,6 @@ class spell_item_complete_raptor_capture : public SpellScript
     void Register() override
     {
         OnEffectHitTarget += SpellEffectFn(spell_item_complete_raptor_capture::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
-    }
-};
-
-enum ImpaleLeviroth
-{
-    NPC_LEVIROTH                = 26452,
-    SPELL_LEVIROTH_SELF_IMPALE  = 49882,
-};
-
-class spell_item_impale_leviroth : public SpellScript
-{
-    PrepareSpellScript(spell_item_impale_leviroth);
-
-    bool Validate(SpellInfo const* /*spell*/) override
-    {
-        if (!sObjectMgr->GetCreatureTemplate(NPC_LEVIROTH))
-            return false;
-        return true;
-    }
-
-    void HandleDummy(SpellEffIndex /* effIndex */)
-    {
-        if (Creature* target = GetHitCreature())
-            if (target->GetEntry() == NPC_LEVIROTH && target->HealthAbovePct(94))
-            {
-                target->CastSpell(target, SPELL_LEVIROTH_SELF_IMPALE, true);
-                target->SetBaseWeaponDamage(BASE_ATTACK, MINDAMAGE, 150);
-                target->SetBaseWeaponDamage(BASE_ATTACK, MAXDAMAGE, 200);
-                target->LowerPlayerDamageReq(target->GetMaxHealth());
-            }
-    }
-
-    void Register() override
-    {
-        OnEffectHitTarget += SpellEffectFn(spell_item_impale_leviroth::HandleDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
     }
 };
 
@@ -6062,6 +6080,75 @@ class spell_item_living_root_of_the_wildheart : public AuraScript
     }
 };
 
+// 64999 - Meteoric Inspiration
+class spell_item_meteoric_inspiration : public AuraScript
+{
+    PrepareAuraScript(spell_item_meteoric_inspiration);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo(
+        {
+            SPELL_PENANCE_R1_HEAL_CHANNEL,
+            SPELL_PENANCE_R1_DAMAGE_CHANNEL,
+            SPELL_BEACON_OF_LIGHT_HOLY_LIGHT,
+            SPELL_BEACON_OF_LIGHT_FLASH_OF_LIGHT,
+            SPELL_BEACON_OF_LIGHT_HOLY_SHOCK
+        });
+    }
+
+    static bool HasManaCost(SpellInfo const* spellInfo)
+    {
+        return spellInfo->PowerType == POWER_MANA && (spellInfo->ManaCost || spellInfo->ManaCostPercentage);
+    }
+
+    // Penance channels cost no mana and nothing links them back to the 47540 cast
+    static bool IsPenanceChannel(SpellInfo const* spellInfo)
+    {
+        return spellInfo->IsRankOf(sSpellMgr->AssertSpellInfo(SPELL_PENANCE_R1_HEAL_CHANNEL)) ||
+            spellInfo->IsRankOf(sSpellMgr->AssertSpellInfo(SPELL_PENANCE_R1_DAMAGE_CHANNEL));
+    }
+
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        Spell const* spell = eventInfo.GetProcSpell();
+        if (!spell)
+            return false;
+
+        SpellInfo const* spellInfo = spell->GetSpellInfo();
+
+        // totems cast by Call of the Elements are triggered
+        if (!spell->IsTriggered() || spellInfo->HasAttribute(SPELL_ATTR7_CAN_BE_MULTI_CAST))
+            return HasManaCost(spellInfo);
+
+        if (!spellInfo->HasAttribute(SPELL_ATTR3_NOT_A_PROC))
+            return false;
+
+        switch (spellInfo->Id)
+        {
+            case SPELL_BEACON_OF_LIGHT_HOLY_LIGHT:
+            case SPELL_BEACON_OF_LIGHT_FLASH_OF_LIGHT:
+            case SPELL_BEACON_OF_LIGHT_HOLY_SHOCK:
+            {
+                // copy is cast inside the source heal's hit, so the generic slot still holds that heal.
+                // 53654 also copies Lay on Hands, so the copy's id alone can't tell
+                Spell const* origin = eventInfo.GetActor()->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+                return origin && HasManaCost(origin->GetSpellInfo());
+            }
+            default:
+                break;
+        }
+
+        SpellInfo const* channel = spell->GetTriggeredByAuraSpellInfo();
+        return channel && channel->IsChanneled() && (HasManaCost(channel) || IsPenanceChannel(channel));
+    }
+
+    void Register() override
+    {
+        DoCheckProc += AuraCheckProcFn(spell_item_meteoric_inspiration::CheckProc);
+    }
+};
+
 void AddSC_item_spell_scripts()
 {
     RegisterSpellScript(spell_item_massive_seaforium_charge);
@@ -6156,7 +6243,6 @@ void AddSC_item_spell_scripts()
     RegisterSpellScript(spell_item_socrethars_stone);
     RegisterSpellScript(spell_item_demon_broiled_surprise);
     RegisterSpellScript(spell_item_complete_raptor_capture);
-    RegisterSpellScript(spell_item_impale_leviroth);
     RegisterSpellScript(spell_item_brewfest_mount_transformation);
     RegisterSpellScript(spell_item_nitro_boots);
     RegisterSpellScript(spell_item_teach_language);
@@ -6243,4 +6329,5 @@ void AddSC_item_spell_scripts()
     RegisterSpellScript(spell_item_purified_shard_of_the_scale);
     RegisterSpellScript(spell_item_shiny_shard_of_the_scale);
     RegisterSpellScript(spell_item_living_root_of_the_wildheart);
+    RegisterSpellScript(spell_item_meteoric_inspiration);
 }

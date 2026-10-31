@@ -37,7 +37,7 @@ void BuildPlayerLockDungeonBlock(WorldPacket& data, lfg::LfgLockMap const& lock)
     }
 }
 
-void BuildPartyLockDungeonBlock(WorldPacket& data, const lfg::LfgLockPartyMap& lockMap)
+void BuildPartyLockDungeonBlock(WorldPacket& data, lfg::LfgLockPartyMap const& lockMap)
 {
     data << uint8(lockMap.size());
     for (lfg::LfgLockPartyMap::const_iterator it = lockMap.begin(); it != lockMap.end(); ++it)
@@ -266,6 +266,10 @@ void WorldSession::HandleLfrSearchJoinOpcode(WorldPacket& recvData)
 {
     uint32 dungeonId;
     recvData >> dungeonId;
+
+    if (!sLFGMgr->isOptionEnabled(lfg::LFG_OPTION_ENABLE_RAID_BROWSER))
+        return;
+
     dungeonId = (dungeonId & 0x00FFFFFF); // remove the type from the dungeon entry
     sLFGMgr->LfrSearchAdd(GetPlayer(), dungeonId);
     sLFGMgr->SendRaidBrowserCachedList(GetPlayer(), dungeonId);
@@ -569,12 +573,32 @@ void WorldSession::SendLfgUpdateProposal(lfg::LfgProposal const& proposal)
     data << uint8(silent);                                 // Show proposal window
     data << uint8(proposal.players.size());                // Group size
 
-    for (lfg::LfgProposalPlayerContainer::const_iterator it = proposal.players.begin(); it != proposal.players.end(); ++it)
+    // Sort by roles: tank, healer, dps
+    std::vector<ObjectGuid> ordered;
+    ordered.reserve(proposal.players.size());
+
+    std::vector<ObjectGuid> tanks, healers, dps;
+
+    for (auto const& [pguid, player] : proposal.players)
     {
-        lfg::LfgProposalPlayer const& player = it->second;
+        if (player.role & lfg::PLAYER_ROLE_TANK)
+            tanks.push_back(pguid);
+        else if (player.role & lfg::PLAYER_ROLE_HEALER)
+            healers.push_back(pguid);
+        else
+            dps.push_back(pguid);
+    }
+
+    ordered.insert(ordered.end(), tanks.begin(), tanks.end());
+    ordered.insert(ordered.end(), healers.begin(), healers.end());
+    ordered.insert(ordered.end(), dps.begin(), dps.end());
+
+    for (auto const& pguid : ordered)
+    {
+        lfg::LfgProposalPlayer const& player = proposal.players.find(pguid)->second;
         data << uint32(player.role);                       // Role
-        data << uint8(it->first == guid);                  // Self player
-        if (!player.group)                                 // Player not it a group
+        data << uint8(pguid == guid);                      // Self player
+        if (!player.group)                                 // Player not in a group
         {
             data << uint8(0);                              // Not in dungeon
             data << uint8(0);                              // Not same group

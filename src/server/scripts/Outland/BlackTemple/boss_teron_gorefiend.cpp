@@ -69,7 +69,8 @@ struct ShadowOfDeathSelector
     ShadowOfDeathSelector(Unit const* tank) : _tank(tank) {}
     bool operator()(Unit const* target) const
     {
-        return target && !target->HasAura(SPELL_SHADOW_OF_DEATH) && !target->HasAura(SPELL_POSSESS_SPIRIT_IMMUNE) && target != _tank;
+        return target && target->IsPlayer() && !target->HasAura(SPELL_SHADOW_OF_DEATH) &&
+            !target->HasAura(SPELL_POSSESS_SPIRIT_IMMUNE) && target != _tank;
     }
 };
 
@@ -77,7 +78,6 @@ struct boss_teron_gorefiend : public BossAI
 {
     boss_teron_gorefiend(Creature* creature) : BossAI(creature, DATA_TERON_GOREFIEND)
     {
-        _recentlySpoken = false;
         _intro = false;
     }
 
@@ -91,7 +91,7 @@ struct boss_teron_gorefiend : public BossAI
     {
         ScheduleTimedEvent(20s, 30s, [&]
         {
-            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
+            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
             {
                 if (roll_chance_i(50))
                     Talk(SAY_INCINERATE);
@@ -127,18 +127,9 @@ struct boss_teron_gorefiend : public BossAI
         BossAI::JustEngagedWith(who);
     }
 
-    void KilledUnit(Unit*  victim) override
+    void KilledUnit(Unit* victim) override
     {
-        if (!_recentlySpoken && victim->IsPlayer())
-        {
-            Talk(SAY_SLAY);
-            _recentlySpoken = true;
-
-            ScheduleUniqueTimedEvent(6s, [&]
-            {
-                _recentlySpoken = false;
-            }, 1);
-        }
+        Talk(SAY_SLAY, victim);
     }
 
     void SetData(uint32 type, uint32 id) override
@@ -175,7 +166,6 @@ struct boss_teron_gorefiend : public BossAI
     }
 
     private:
-        bool _recentlySpoken;
         bool _intro;
 };
 

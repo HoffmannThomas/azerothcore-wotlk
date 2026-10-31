@@ -19,6 +19,7 @@
 #include "CommandScript.h"
 #include "DBCStructure.h"
 #include "Language.h"
+#include "RBAC.h"
 #include "SmartEnum.h"
 #include "SpellAuraDefines.h"
 #include "SpellInfo.h"
@@ -35,10 +36,10 @@ public:
     {
         static ChatCommandTable spellinfoCommandTable =
         {
-            { "attributes", HandleSpellInfoAttributesCommand, SEC_GAMEMASTER, Console::Yes },
-            { "effects",    HandleSpellInfoEffectsCommand,    SEC_GAMEMASTER, Console::Yes },
-            { "targets",    HandleSpellInfoTargetsCommand,    SEC_GAMEMASTER, Console::Yes },
-            { "all",        HandleSpellInfoAllCommand,        SEC_GAMEMASTER, Console::Yes }
+            { "attributes", HandleSpellInfoAttributesCommand, rbac::RBAC_PERM_COMMAND_SPELLINFO_ATTRIBUTES, Console::Yes },
+            { "effects",    HandleSpellInfoEffectsCommand,    rbac::RBAC_PERM_COMMAND_SPELLINFO_EFFECTS,    Console::Yes },
+            { "targets",    HandleSpellInfoTargetsCommand,    rbac::RBAC_PERM_COMMAND_SPELLINFO_TARGETS,    Console::Yes },
+            { "all",        HandleSpellInfoAllCommand,        rbac::RBAC_PERM_COMMAND_SPELLINFO_ALL,        Console::Yes }
         };
 
         static ChatCommandTable commandTable =
@@ -785,7 +786,7 @@ public:
             if (spell->AttributesCu & SPELL_ATTR0_CU_DONT_BREAK_STEALTH)    handler->PSendSysMessage("  - SPELL_ATTR0_CU_DONT_BREAK_STEALTH");
             if (spell->AttributesCu & SPELL_ATTR0_CU_NO_PVP_FLAG)           handler->PSendSysMessage("  - SPELL_ATTR0_CU_NO_PVP_FLAG");
             if (spell->AttributesCu & SPELL_ATTR0_CU_DIRECT_DAMAGE)         handler->PSendSysMessage("  - SPELL_ATTR0_CU_DIRECT_DAMAGE");
-            if (spell->AttributesCu & SPELL_ATTR0_CU_CHARGE)                handler->PSendSysMessage("  - SPELL_ATTR0_CU_CHARGE");
+            if (spell->AttributesCu & SPELL_ATTR0_CU_IGNORE_BINARY)         handler->PSendSysMessage("  - SPELL_ATTR0_CU_IGNORE_BINARY");
             if (spell->AttributesCu & SPELL_ATTR0_CU_PICKPOCKET)            handler->PSendSysMessage("  - SPELL_ATTR0_CU_PICKPOCKET");
             if (spell->AttributesCu & SPELL_ATTR0_CU_IGNORE_EVADE)          handler->PSendSysMessage("  - SPELL_ATTR0_CU_IGNORE_EVADE");
             if (spell->AttributesCu & SPELL_ATTR0_CU_NEGATIVE_EFF0)         handler->PSendSysMessage("  - SPELL_ATTR0_CU_NEGATIVE_EFF0");

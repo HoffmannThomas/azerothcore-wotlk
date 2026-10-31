@@ -96,6 +96,39 @@ enum valhalas
     NPC_CARNAGE                                 = 31271,
     NPC_THANE                                   = 31277,
     NPC_PRINCE                                  = 14688, // no mistake
+
+    SAY_FALLEN_HEROES_ACCEPT                    = 0,
+    SAY_FALLEN_HEROES_CHALLENGERS               = 1,
+    SAY_FALLEN_HEROES_STAKES                    = 2,
+    EMOTE_FALLEN_HEROES_ARRIVE                  = 3,
+    SAY_FALLEN_HEROES_VICTORY                   = 4,
+
+    SAY_DARK_MASTER_ACCEPT                      = 5,
+    SAY_DARK_MASTER_CHALLENGERS                 = 6,
+    EMOTE_DARK_MASTER_ARRIVE                    = 7,
+    SAY_DARK_MASTER_VICTORY                     = 8,
+
+    SAY_SIGRID_ACCEPT                           = 9,
+    EMOTE_SIGRID_ARRIVE                         = 10,
+    SAY_SIGRID_VICTORY                          = 11,
+
+    SAY_CARNAGE_ACCEPT                          = 12,
+    SAY_CARNAGE_CHALLENGERS                     = 13,
+    EMOTE_CARNAGE_ARRIVE                        = 14,
+    SAY_CARNAGE_VICTORY                         = 15,
+
+    SAY_THANE_ACCEPT                            = 16,
+    SAY_THANE_CHALLENGERS                       = 17,
+    EMOTE_THANE_ARRIVE                          = 18,
+    SAY_THANE_VICTORY                           = 19,
+
+    SAY_FINAL_ACCEPT                            = 20,
+    SAY_FINAL_CHALLENGERS                       = 21,
+    SAY_FINAL_OPPONENT                          = 22,
+    EMOTE_FINAL_ARRIVE                          = 23,
+    SAY_FINAL_VICTORY                           = 24,
+    SAY_FINAL_CHAMPION_1                        = 25,
+    SAY_FINAL_CHAMPION_2                        = 26,
 };
 
 class npc_battle_at_valhalas : public CreatureScript
@@ -194,31 +227,32 @@ public:
             {
                 case EVENT_VALHALAS_FIRST:
                     {
+                        Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
                         switch (currentQuest)
                         {
                             case QUEST_BFV_FALLEN_HEROES:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("$N and comrades in arms have chosen to accept honorable combat within the sacred confines of Valhalas.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_FALLEN_HEROES_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_DARK_MASTER:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("$N has accepted the challenge of Khit'rix the Dark Master. May the gods show mercy upon him for Khit'rix surely will not.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_DARK_MASTER_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_SIGRID:
                                 PrepareSummons();
-                                me->TextEmote("Circling Valhalas, Sigrid Iceborn approaches to seek her revenge!", nullptr, true);
+                                Talk(EMOTE_SIGRID_ARRIVE);
                                 break;
                             case QUEST_BFV_CARNAGE:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("From the bowels of the Underhalls comes Carnage. Brave and foolish $N has accepted the challenge. $N and his group stand ready to face the monstrosity.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_CARNAGE_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_THANE:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("Thane Banahogg returns to Valhalas for the first time in ages to prove that the vrykul are the only beings worthy to fight within its sacred ring. Will $N prove him wrong?", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_THANE_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_FINAL:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("From the depths of Icecrown Citadel, one of the Lich King's chosen comes to put an end to the existence of $N and his friends.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_FINAL_CHALLENGERS, player);
                                 break;
                         }
 
@@ -231,21 +265,21 @@ public:
                         switch (currentQuest)
                         {
                             case QUEST_BFV_FALLEN_HEROES:
-                                me->Yell("There can only be one outcome to such a battle: death for one side or the other. Let $n prove himself upon the bones of these outsiders who have fallen before!", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                                me->TextEmote("The fallen heroes of Valhalas emerge from the ground to do battle once more!", nullptr, true);
+                                Talk(SAY_FALLEN_HEROES_STAKES, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(EMOTE_FALLEN_HEROES_ARRIVE);
                                 break;
                             case QUEST_BFV_DARK_MASTER:
-                                me->TextEmote("Khit'rix the Dark Master skitters into Valhalas from the southeast!", nullptr, true);
+                                Talk(EMOTE_DARK_MASTER_ARRIVE);
                                 break;
                             case QUEST_BFV_CARNAGE:
-                                me->TextEmote("Lumbering in from the south, the smell of Carnage precedes him!", nullptr, true);
+                                Talk(EMOTE_CARNAGE_ARRIVE);
                                 break;
                             case QUEST_BFV_THANE:
-                                me->TextEmote("Thane Banahogg appears upon the overlook to the southeast!", nullptr, true);
+                                Talk(EMOTE_THANE_ARRIVE);
                                 break;
                             case QUEST_BFV_FINAL:
-                                me->Yell("Warriors of Jotunheim, I present to you, Blood Prince Sandoval!", LANG_UNIVERSAL);
-                                me->TextEmote("Without warning, Prince Sandoval magically appears within Valhalas!", nullptr, true);
+                                Talk(SAY_FINAL_OPPONENT);
+                                Talk(EMOTE_FINAL_ARRIVE);
                                 break;
                         }
 
@@ -255,14 +289,14 @@ public:
                 case EVENT_VALHALAS_THIRD:
                     {
                         if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-                            me->Yell("In defeating him, he and his fighting companions have proven themselves worthy of battle in this most sacred place of vrykul honor.", LANG_UNIVERSAL, player);
+                            Talk(SAY_FINAL_CHAMPION_1, player);
                         events.ScheduleEvent(EVENT_VALHALAS_THIRD_2, 7s);
                         break;
                     }
                 case EVENT_VALHALAS_THIRD_2:
                     {
                         if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-                            me->Yell("ALL HAIL $N, CHAMPION OF VALHALAS! ", LANG_UNIVERSAL, player);
+                            Talk(SAY_FINAL_CHAMPION_2, player);
                         EndBattle();
                         break;
                     }
@@ -287,22 +321,22 @@ public:
                             switch (currentQuest)
                             {
                                 case QUEST_BFV_FALLEN_HEROES:
-                                    me->Yell("$N has defeated the fallen heroes of Valhalas battles past. This is only a beginning, but it will suffice.", LANG_UNIVERSAL, player);
+                                    Talk(SAY_FALLEN_HEROES_VICTORY, player);
                                     break;
                                 case QUEST_BFV_DARK_MASTER:
-                                    me->Yell("Khit'rix the Dark Master has been defeated by $N and his band of companions. Let the next challenge be issued!", LANG_UNIVERSAL, player);
+                                    Talk(SAY_DARK_MASTER_VICTORY, player);
                                     break;
                                 case QUEST_BFV_SIGRID:
-                                    me->Yell("$N has defeated Sigrid Iceborn for a second time. Well, this time he did it with the help of his friends, but a win is a win!", LANG_UNIVERSAL, player);
+                                    Talk(SAY_SIGRID_VICTORY, player);
                                     break;
                                 case QUEST_BFV_CARNAGE:
-                                    me->Yell("The horror known as Carnage is no more. Could it be that $N is truly worthy of battle in Valhalas? We shall see.", LANG_UNIVERSAL, player);
+                                    Talk(SAY_CARNAGE_VICTORY, player);
                                     break;
                                 case QUEST_BFV_THANE:
-                                    me->Yell("Thane Banahogg the Deathblow has fallen to $N and his fighting companions. He has but one challenge ahead of him. Who will it be?", LANG_UNIVERSAL, player);
+                                    Talk(SAY_THANE_VICTORY, player);
                                     break;
                                 case QUEST_BFV_FINAL:
-                                    me->Yell("The unthinkable has happened... $N has slain Prince Sandoval!", LANG_UNIVERSAL, player);
+                                    Talk(SAY_FINAL_VICTORY, player);
                                     break;
                             }
 
@@ -331,22 +365,22 @@ public:
         switch (quest->GetQuestId())
         {
             case QUEST_BFV_FALLEN_HEROES:
-                creature->Say("Valhalas is yours to win or die in, $N. But whatever you do, stay within the bounds of the arena. To flee is to lose and be dishonored.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_FALLEN_HEROES_ACCEPT, player);
                 break;
             case QUEST_BFV_DARK_MASTER:
-                creature->Say("Prepare yourself. Khit'rix will be entering Valhalas from the southeast. Remember, do not leave the ring or you will lose the battle.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_DARK_MASTER_ACCEPT, player);
                 break;
             case QUEST_BFV_SIGRID:
-                creature->Yell("Sigrid Iceborn has returned to the heights of Jotunheim to prove herself against $N. When last they met, $N bester her in personal combat. Let us see the outcome of this match.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_SIGRID_ACCEPT, player);
                 break;
             case QUEST_BFV_CARNAGE:
-                creature->Say("Carnage is coming! Remember, no matter what you do, do NOT leave the battle ring or I will disqualify you and your group.", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_CARNAGE_ACCEPT);
                 break;
             case QUEST_BFV_THANE:
-                creature->Say("Look to the southeast and you will see the thane upon the platform near Gjonner the Merciless when he shows himself. Let him come down. Stay within the ring of Valhalas.", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_THANE_ACCEPT);
                 break;
             case QUEST_BFV_FINAL:
-                creature->Say("It's too late to run now. Do not leave the ring. Die bravely, $N!", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_FINAL_ACCEPT, player);
                 break;
         }
 
@@ -1211,7 +1245,7 @@ class spell_anti_air_rocket_bomber : public SpellScript
     void HandleDummy(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        const WorldLocation* loc = GetExplTargetDest();
+        WorldLocation const* loc = GetExplTargetDest();
         GetCaster()->CastSpell(loc->GetPositionX(), loc->GetPositionY(), loc->GetPositionZ(), GetSpellInfo()->Effects[effIndex].CalcValue(), true);
     }
 
@@ -1532,6 +1566,8 @@ public:
 
         void Reset() override
         {
+            // EnterEvadeMode override leaves UNIT_STATE_EVADE set; clear it so the dummy stays attackable
+            me->ClearUnitState(UNIT_STATE_EVADE);
             me->SetControlled(true, UNIT_STATE_STUNNED);
             isVulnerable = false;
 
@@ -1682,6 +1718,10 @@ enum BlessedBanner
     EVENT_WAVE_SPAWN                    = 7,
     EVENT_HALOF                         = 8,
     EVENT_ENDED                         = 9,
+
+    GROUP_WAVE_PLAGUEBRINGERS           = 0,
+    GROUP_WAVE_CAPTAINS                 = 1,
+    GROUP_WAVE_HALOF                    = 2,
 };
 
 Position const DalforsPos[3] =
@@ -1739,7 +1779,6 @@ public:
     {
         npc_blessed_bannerAI(Creature* creature) : ScriptedAI(creature), Summons(me)
         {
-            HalofSpawned = false;
             PhaseCount = 0;
             Summons.DespawnAll();
 
@@ -1747,8 +1786,6 @@ public:
         }
 
         EventMap events;
-
-        bool HalofSpawned;
 
         uint32 PhaseCount;
 
@@ -1774,17 +1811,8 @@ public:
         void JustSummoned(Creature* summon) override
         {
             Summons.Summon(summon);
-            if (summon->GetEntry() == NPC_SCOURGE_DRUDGE || summon->GetEntry() == NPC_REANIMATED_CAPTAIN ||
-                summon->GetEntry() == NPC_HIDEOUS_PLAGUEBRINGER || summon->GetEntry() == NPC_HALOF_THE_DEATHBRINGER)
-            {
-                summon->SetHomePosition(DalforsPos[2]);
-                summon->SetReactState(REACT_PASSIVE);
-                summon->EngageWithTarget(me);
-                summon->m_Events.AddEventAtOffset([summon]()
-                {
-                    summon->SetReactState(REACT_AGGRESSIVE);
-                }, 2s);
-            }
+            if (summon->GetEntry() == NPC_HALOF_THE_DEATHBRINGER)
+                guidHalof = summon->GetGUID();
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -1937,17 +1965,7 @@ public:
                             if (Creature* LK = GetClosestCreatureWithEntry(me, NPC_LK, 100))
                                 LK->AI()->Talk(LK_TALK_3);
                         }
-                        DoSummon(NPC_SCOURGE_DRUDGE, Mason3Pos[0]);
-                        if (urand(0, 1) == 0)
-                        {
-                            DoSummon(NPC_HIDEOUS_PLAGUEBRINGER, Mason1Pos[0]);
-                            DoSummon(NPC_HIDEOUS_PLAGUEBRINGER, Mason2Pos[0]);
-                        }
-                        else
-                        {
-                            DoSummon(NPC_REANIMATED_CAPTAIN, Mason1Pos[0]);
-                            DoSummon(NPC_REANIMATED_CAPTAIN, Mason2Pos[0]);
-                        }
+                        me->SummonCreatureGroup(urand(GROUP_WAVE_PLAGUEBRINGERS, GROUP_WAVE_CAPTAINS));
 
                         PhaseCount++;
 
@@ -1961,13 +1979,7 @@ public:
                     {
                         if (Creature* LK = GetClosestCreatureWithEntry(me, NPC_LK, 100))
                             LK->AI()->Talk(LK_TALK_4);
-                        DoSummon(NPC_SCOURGE_DRUDGE, Mason1Pos[0]);
-                        DoSummon(NPC_SCOURGE_DRUDGE, Mason2Pos[0]);
-                        if (Creature* tempsum = DoSummon(NPC_HALOF_THE_DEATHBRINGER, DalforsPos[0]))
-                        {
-                            HalofSpawned = true;
-                            guidHalof = tempsum->GetGUID();
-                        }
+                        me->SummonCreatureGroup(GROUP_WAVE_HALOF);
                     }
                     break;
                 case EVENT_ENDED:
@@ -2112,6 +2124,423 @@ class spell_crashing_wave : public SpellScript
     }
 };
 
+/*######
+## Quest 13279/13295 "Basic Chemistry" and its repeatables 13281/13297 "Neutralizing the Plague" -
+## the plague cauldrons of Mord'rethar
+######*/
+
+enum BasicChemistry
+{
+    NPC_PLAGUE_CAULDRON_KC_BUNNY        = 31767,
+    NPC_CAULDRON_TARGET_00              = 31773,
+    NPC_CAULDRON_BUNNY_00               = 31880,
+    NPC_PLAGUE_DRENCHED_GHOUL           = 32176,
+    NPC_RAMPAGING_GHOUL                 = 32178,
+    NPC_CAULDRON_TARGET_01              = 32427,
+    NPC_CAULDRON_BUNNY_01               = 32431,
+    NPC_CAULDRON_TARGET_02              = 32442,
+    NPC_CAULDRON_BUNNY_02               = 32445,
+
+    SPELL_PIERCE_ARMOR                  = 6016,
+    SPELL_ORANGE_RADIATION              = 45797,
+    SPELL_DISEASE_CLOUD                 = 50106,
+    SPELL_NEUTRALIZING_DOSE_APPLIED     = 59659,
+    SPELL_EVENT_TIMER_BUFF              = 59872,
+    SPELL_FLUID_TIMER_BUFF              = 59873,
+    SPELL_CAULDRON_EVENT_FAILED         = 59874,
+    SPELL_CAULDRON_EVENT_COMPLETE       = 59875,
+    SPELL_HUGE_GREEN_SPLASH             = 60059,
+    SPELL_PLAGUE_BITE                   = 60678,
+    SPELL_EMERGE                        = 66947,
+
+    // creature_text of the cauldron targets
+    SAY_CAULDRON_BOILS                  = 0,
+
+    // creature_text of the cauldron bunnies
+    SAY_WAVE_EMERGES                    = 0,
+    SAY_WAVE_EMPTY                      = 1,
+    SAY_EVENT_COMPLETE                  = 2,
+    SAY_FLUID_LOW                       = 3,
+    SAY_FLUID_CRITICAL                  = 4,
+    SAY_EVENT_FAILED                    = 5,
+
+    // creature_summon_groups of the cauldron bunnies
+    GROUP_PLAGUE_SWARM                  = 0,
+    GROUP_GHOUL_AND_PLAGUE              = 1,
+    GROUP_GHOUL_PAIR                    = 2,
+    GROUP_DRENCHED_GHOUL                = 3,
+    GROUP_NOTHING                       = 4,
+
+    ACTION_ADD_FLUID                    = 1,
+    ACTION_EVENT_FAILED                 = 2,
+    ACTION_EVENT_COMPLETE               = 3,
+
+    DATA_GHOUL_JUMP                     = 1,
+
+    POINT_GHOUL_LANDED                  = 1
+};
+
+// Identifies one ghoul spawn slot: which cauldron summoned it, which wave group, and which of that
+// group's ghouls it is. The bunny stamps this on every ghoul it summons and the ghoul looks its own
+// landing point up by it, so the jump follows the `creature_summon_groups` row - which means the
+// two rows of the paired group have to stay in the order they are written in.
+constexpr uint32 GhoulJumpId(uint32 summoner, uint32 group, uint32 slot)
+{
+    return summoner * 100 + group * 10 + slot;
+}
+
+struct GhoulJumpData
+{
+    uint32 id;
+    Position landing;
+    float height;   // arc apex in yards - the ghouls thrown off the sides of the road arc higher
+};
+
+// The landing point is a property of the slot and the pairing held across every activation in the
+// sniff: at all three cauldrons the ghoul on the `+` side of the cauldron lands on the `+` side.
+GhoulJumpData const GhoulJumps[] =
+{
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_00, GROUP_GHOUL_AND_PLAGUE, 0), { 6777.94f, 1611.23f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_00, GROUP_GHOUL_PAIR,       0), { 6765.83f, 1621.09f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_00, GROUP_GHOUL_PAIR,       1), { 6794.71f, 1623.46f, 389.033f }, 6.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_00, GROUP_DRENCHED_GHOUL,   0), { 6777.03f, 1608.18f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_01, GROUP_GHOUL_AND_PLAGUE, 0), { 6773.30f, 1583.22f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_01, GROUP_GHOUL_PAIR,       0), { 6763.36f, 1567.51f, 389.033f }, 6.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_01, GROUP_GHOUL_PAIR,       1), { 6761.96f, 1600.88f, 389.033f }, 6.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_01, GROUP_DRENCHED_GHOUL,   0), { 6777.47f, 1583.80f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_02, GROUP_GHOUL_AND_PLAGUE, 0), { 6777.73f, 1558.13f, 389.033f }, 5.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_02, GROUP_GHOUL_PAIR,       0), { 6764.14f, 1547.33f, 389.033f }, 6.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_02, GROUP_GHOUL_PAIR,       1), { 6792.88f, 1548.01f, 389.033f }, 6.0f },
+    { GhoulJumpId(NPC_CAULDRON_BUNNY_02, GROUP_DRENCHED_GHOUL,   0), { 6776.98f, 1555.82f, 389.033f }, 5.0f }
+};
+
+GhoulJumpData const* GetGhoulJumpData(uint32 id)
+{
+    for (GhoulJumpData const& jump : GhoulJumps)
+        if (jump.id == id)
+            return &jump;
+
+    return nullptr;
+}
+
+struct WaveChance
+{
+    uint8 group;
+    uint8 chance;
+};
+
+// Could use more testing to figure out exact chances.
+WaveChance const WaveChances[] =
+{
+    { GROUP_GHOUL_AND_PLAGUE, 30 },
+    { GROUP_PLAGUE_SWARM,     20 },
+    { GROUP_DRENCHED_GHOUL,   20 },
+    { GROUP_GHOUL_PAIR,       20 },
+    { GROUP_NOTHING,          10 }
+};
+
+struct npc_plague_cauldron_target : public ScriptedAI
+{
+    npc_plague_cauldron_target(Creature* creature) : ScriptedAI(creature) { }
+
+    void SpellHit(Unit* caster, SpellInfo const* spellInfo) override
+    {
+        if (spellInfo->Id != SPELL_NEUTRALIZING_DOSE_APPLIED)
+            return;
+
+        Player* player = caster ? caster->ToPlayer() : nullptr;
+        if (!player)
+            return;
+
+        // A dose landing while the event is up reschedules the waves and warnings
+        if (Creature* bunny = me->FindNearestCreature(GetBunnyEntry(), 5.0f))
+        {
+            bunny->AI()->DoAction(ACTION_ADD_FLUID);
+            return;
+        }
+
+        DoCastSelf(SPELL_ORANGE_RADIATION, true);
+        Talk(SAY_CAULDRON_BOILS, player);
+
+        if (Creature* bunny = me->SummonCreature(GetBunnyEntry(), me->GetPositionX(), me->GetPositionY(),
+            me->GetPositionZ() + 0.0833f, me->GetOrientation(), TEMPSUMMON_TIMED_DESPAWN, 250 * IN_MILLISECONDS))
+        {
+            bunny->AI()->SetGUID(player->GetGUID());
+        }
+    }
+
+    void SummonedCreatureDespawn(Creature* /*summon*/) override
+    {
+        me->RemoveAurasDueToSpell(SPELL_ORANGE_RADIATION);
+    }
+
+private:
+    uint32 GetBunnyEntry() const
+    {
+        switch (me->GetEntry())
+        {
+            case NPC_CAULDRON_TARGET_01:
+                return NPC_CAULDRON_BUNNY_01;
+            case NPC_CAULDRON_TARGET_02:
+                return NPC_CAULDRON_BUNNY_02;
+            default:
+                return NPC_CAULDRON_BUNNY_00;
+        }
+    }
+};
+
+struct npc_plague_cauldron_bunny : public ScriptedAI
+{
+    npc_plague_cauldron_bunny(Creature* creature) : ScriptedAI(creature)
+    {
+        me->SetReactState(REACT_PASSIVE);
+    }
+
+    void SetGUID(ObjectGuid const& guid, int32 /*id*/) override
+    {
+        _doserGUID = guid;
+    }
+
+    void IsSummonedBy(WorldObject* /*summoner*/) override
+    {
+        DoCastSelf(SPELL_EVENT_TIMER_BUFF, true);
+        AddFluid();
+    }
+
+    void DoAction(int32 action) override
+    {
+        switch (action)
+        {
+            case ACTION_ADD_FLUID:
+                AddFluid();
+                break;
+            case ACTION_EVENT_FAILED:
+                DoCastSelf(SPELL_CAULDRON_EVENT_FAILED, true);
+                Talk(SAY_EVENT_FAILED, GetDoser());
+                EndEvent();
+                break;
+            case ACTION_EVENT_COMPLETE:
+            {
+                DoCastSelf(SPELL_CAULDRON_EVENT_COMPLETE, true);
+
+                Player* doser = GetDoser();
+                Talk(SAY_EVENT_COMPLETE, doser);
+
+                if (doser)
+                    doser->RewardPlayerAndGroupAtEvent(NPC_PLAGUE_CAULDRON_KC_BUNNY, me);
+
+                EndEvent();
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        scheduler.Update(diff);
+    }
+
+private:
+
+    void EndEvent()
+    {
+        scheduler.CancelAll();
+        me->DespawnOrUnsummon(500ms);
+    }
+
+    // Adding a dose schedules two waves and the warnings
+    // Adding another dose during the event just re-schedules these
+    void AddFluid()
+    {
+        DoCastSelf(SPELL_FLUID_TIMER_BUFF, true);
+
+        scheduler.CancelAll();
+        scheduler.Schedule(5s, [this](TaskContext /*context*/)
+        {
+            SummonWave();
+        }).Schedule(30s, [this](TaskContext /*context*/)
+        {
+            SummonWave();
+        }).Schedule(46s, [this](TaskContext /*context*/)
+        {
+            Talk(SAY_FLUID_LOW, GetDoser());
+        }).Schedule(58s, [this](TaskContext /*context*/)
+        {
+            Talk(SAY_FLUID_CRITICAL, GetDoser());
+        });
+    }
+
+    void SummonWave()
+    {
+        uint8 const group = RollWaveGroup();
+
+        // A tick that rolls nothing is silent apart from the line
+        if (group == GROUP_NOTHING)
+        {
+            Talk(SAY_WAVE_EMPTY, GetDoser());
+            return;
+        }
+
+        DoCastSelf(SPELL_HUGE_GREEN_SPLASH);
+        Talk(SAY_WAVE_EMERGES, GetDoser());
+
+        std::list<TempSummon*> summons;
+        me->SummonCreatureGroup(group, &summons);
+
+        // No group mixes the two ghoul entries, so one counter walking the list in row order is
+        // enough to tell a paired group's two ghouls apart.
+        uint32 slot = 0;
+        for (TempSummon* summon : summons)
+            if (summon->GetEntry() == NPC_RAMPAGING_GHOUL || summon->GetEntry() == NPC_PLAGUE_DRENCHED_GHOUL)
+                summon->AI()->SetData(DATA_GHOUL_JUMP, GhoulJumpId(me->GetEntry(), group, slot++));
+    }
+
+    uint8 RollWaveGroup() const
+    {
+        uint8 roll = urand(0, 99);
+        for (WaveChance const& wave : WaveChances)
+        {
+            if (roll < wave.chance)
+                return wave.group;
+
+            roll -= wave.chance;
+        }
+
+        return GROUP_NOTHING;
+    }
+
+    Player* GetDoser() const
+    {
+        return ObjectAccessor::GetPlayer(*me, _doserGUID);
+    }
+
+    ObjectGuid _doserGUID;
+};
+
+struct npc_plague_cauldron_ghoul : public ScriptedAI
+{
+    npc_plague_cauldron_ghoul(Creature* creature) : ScriptedAI(creature) { }
+
+    void IsSummonedBy(WorldObject* /*summoner*/) override
+    {
+        me->AddUnitState(UNIT_STATE_NO_ENVIRONMENT_UPD);
+        me->SetReactState(REACT_PASSIVE);
+        me->SetImmuneToAll(true);
+        DoCastSelf(SPELL_EMERGE);
+
+        scheduler.Schedule(3200ms, [this](TaskContext /*context*/)
+        {
+            GhoulJumpData const* jump = GetGhoulJumpData(_jumpId);
+            if (!jump)
+            {
+                Land();
+                return;
+            }
+
+            if (me->GetEntry() == NPC_PLAGUE_DRENCHED_GHOUL)
+                DoCastSelf(SPELL_DISEASE_CLOUD);
+
+            me->ClearUnitState(UNIT_STATE_NO_ENVIRONMENT_UPD);
+            me->GetMotionMaster()->MoveJump(jump->landing, 25.0f,
+                std::sqrt(2.0f * float(Movement::gravity) * jump->height), POINT_GHOUL_LANDED);
+        });
+    }
+
+    void Reset() override
+    {
+        scheduler.CancelAll();
+    }
+
+    void SetData(uint32 id, uint32 value) override
+    {
+        if (id == DATA_GHOUL_JUMP)
+            _jumpId = value;
+    }
+
+    void MovementInform(uint32 type, uint32 pointId) override
+    {
+        if (type == EFFECT_MOTION_TYPE && pointId == POINT_GHOUL_LANDED)
+            Land();
+    }
+
+    void JustEngagedWith(Unit* /*who*/) override
+    {
+        if (me->GetEntry() == NPC_PLAGUE_DRENCHED_GHOUL)
+            ScheduleTimedEvent(3800ms, 7s, [this] { DoCastVictim(SPELL_PLAGUE_BITE); }, 11s, 21s);
+        else
+            ScheduleTimedEvent(3800ms, 17s, [this] { DoCastVictim(SPELL_PIERCE_ARMOR); }, 21s, 41s);
+    }
+
+    void UpdateAI(uint32 diff) override
+    {
+        scheduler.Update(diff);
+
+        if (!UpdateVictim())
+            return;
+
+        DoMeleeAttackIfReady();
+    }
+
+private:
+    void Land()
+    {
+        me->ClearUnitState(UNIT_STATE_NO_ENVIRONMENT_UPD);
+        me->SetImmuneToAll(false);
+        me->SetReactState(REACT_AGGRESSIVE);
+        me->SetHomePosition(me->GetPosition());
+        me->GetMotionMaster()->MoveRandom(13.0f);
+    }
+
+    uint32 _jumpId = 0;
+};
+
+// 59872 - Event Timer Buff
+class spell_cauldron_event_timer_aura : public AuraScript
+{
+    PrepareAuraScript(spell_cauldron_event_timer_aura);
+
+    void HandleExpire(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+
+        Creature* bunny = GetTarget()->ToCreature();
+        if (!bunny || !bunny->AI())
+            return;
+
+        // Surviving the four minutes is the win, as long as the batch never ran dry on the way.
+        bunny->AI()->DoAction(bunny->HasAura(SPELL_FLUID_TIMER_BUFF) ? ACTION_EVENT_COMPLETE : ACTION_EVENT_FAILED);
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_cauldron_event_timer_aura::HandleExpire, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 59873 - Fluid Timer Buff
+class spell_cauldron_fluid_timer_aura : public AuraScript
+{
+    PrepareAuraScript(spell_cauldron_fluid_timer_aura);
+
+    void HandleExpire(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (GetTargetApplication()->GetRemoveMode() != AURA_REMOVE_BY_EXPIRE)
+            return;
+
+        if (Creature* bunny = GetTarget()->ToCreature())
+            if (bunny->AI())
+                bunny->AI()->DoAction(ACTION_EVENT_FAILED);
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_cauldron_fluid_timer_aura::HandleExpire, EFFECT_0, SPELL_AURA_DUMMY, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 void AddSC_icecrown()
 {
     new npc_black_knight_graveyard();
@@ -2132,4 +2561,9 @@ void AddSC_icecrown()
     new npc_blessed_banner();
     new npc_frostbrood_skytalon();
     RegisterSpellScript(spell_crashing_wave);
+    RegisterCreatureAI(npc_plague_cauldron_target);
+    RegisterCreatureAI(npc_plague_cauldron_bunny);
+    RegisterCreatureAI(npc_plague_cauldron_ghoul);
+    RegisterSpellScript(spell_cauldron_event_timer_aura);
+    RegisterSpellScript(spell_cauldron_fluid_timer_aura);
 }

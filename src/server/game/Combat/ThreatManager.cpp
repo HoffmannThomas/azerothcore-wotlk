@@ -206,6 +206,10 @@ void ThreatReference::HeapNotifyDecreased()
             if (tWho->GetSummonerGUID().IsPlayer())
                 return false;
 
+    // accessories are fully treated as components of the parent and cannot have threat
+    if (cWho->HasUnitTypeMask(UNIT_MASK_ACCESSORY))
+        return false;
+
     return true;
 }
 
@@ -422,6 +426,14 @@ void ThreatManager::AddThreat(Unit* target, float amount, SpellInfo const* spell
     // apply threat modifiers to the amount
     if (!ignoreModifiers)
         amount = CalculateModifiedThreat(amount, target, spell);
+
+    // the owner's AI sees the threat once, before any of it is redirected; the redirected shares are not reported again
+    if (!ignoreRedirects)
+    {
+        if (Creature* creatureOwner = _owner->ToCreature())
+            if (creatureOwner->IsAIEnabled)
+                creatureOwner->AI()->CalculateThreat(target, amount, spell);
+    }
 
     // if we're increasing threat, send some/all of it to redirection targets instead if applicable
     if (!ignoreRedirects && amount > 0.0f)

@@ -370,6 +370,8 @@ enum SpellGroupStackRule
 typedef std::unordered_map<SpellGroup, SpellGroupStackRule> SpellGroupStackMap;
 
 typedef std::unordered_map<SpellGroup, std::unordered_set<uint32 /*auraName*/>> SameEffectStackMap;
+typedef std::unordered_map<SpellGroup, std::set<std::pair<uint32 /*auraName*/, int32 /*miscValue*/>>>
+    SameEffectStackSharedMiscMap;
 
 struct SpellThreatEntry
 {
@@ -392,6 +394,13 @@ struct SpellTargetPosition
 };
 
 typedef std::map<std::pair<uint32 /*spell_id*/, SpellEffIndex /*effIndex*/>, SpellTargetPosition> SpellTargetPositionMap;
+
+struct SpellCone
+{
+    int16_t cone_degrees;
+};
+
+typedef std::map<uint32 /*spell_id*/, SpellCone> SpellConeMap;
 
 // Enum with EffectRadiusIndex and their actual radius
 enum EffectRadiusIndex
@@ -660,8 +669,8 @@ public:
     // Spell difficulty
     [[nodiscard]] uint32 GetSpellDifficultyId(uint32 spellId) const;
     void SetSpellDifficultyId(uint32 spellId, uint32 id);
-    uint32 GetSpellIdForDifficulty(uint32 spellId, Unit const* caster) const;
-    SpellInfo const* GetSpellForDifficultyFromSpell(SpellInfo const* spell, Unit const* caster) const;
+    uint32 GetSpellIdForDifficulty(uint32 spellId, WorldObject const* caster) const;
+    SpellInfo const* GetSpellForDifficultyFromSpell(SpellInfo const* spell, WorldObject const* caster) const;
 
     // Spell Ranks table
     [[nodiscard]] SpellChainNode const* GetSpellChainNode(uint32 spell_id) const;
@@ -680,9 +689,11 @@ public:
 
     // Spell learning
     [[nodiscard]] SpellLearnSkillNode const* GetSpellLearnSkill(uint32 spell_id) const;
+    [[nodiscard]] std::vector<uint32> GetSkillRankSpells(uint32 skillId) const;
 
     // Spell target coordinates
     [[nodiscard]] SpellTargetPosition const* GetSpellTargetPosition(uint32 spell_id, SpellEffIndex effIndex) const;
+    [[nodiscard]] SpellCone const* GetSpellCone(uint32 spell_id) const;
 
     // Spell Groups table
     SpellSpellGroupMapBounds GetSpellSpellGroupMapBounds(uint32 spell_id) const;
@@ -693,7 +704,8 @@ public:
     void GetSetOfSpellsInSpellGroup(SpellGroup group_id, std::set<uint32>& foundSpells, std::set<SpellGroup>& usedGroups) const;
 
     // Spell Group Stack Rules table
-    bool AddSameEffectStackRuleSpellGroups(SpellInfo const* spellInfo, uint32 auraType, int32 amount, std::map<SpellGroup, int32>& groups) const;
+    bool AddSameEffectStackRuleSpellGroups(SpellInfo const* spellInfo, uint32 auraType, int32 miscValue,
+        int32 amount, std::map<SpellGroup, int32>& groups) const;
     SpellGroupStackRule CheckSpellGroupStackRules(SpellInfo const* spellInfo1, SpellInfo const* spellInfo2) const;
     SpellGroupStackRule GetSpellGroupStackRule(SpellGroup group_id) const;
 
@@ -717,7 +729,7 @@ public:
     [[nodiscard]] SpellEnchantProcEntry const* GetSpellEnchantProcEvent(uint32 enchId) const;
     [[nodiscard]] bool IsArenaAllowedEnchancment(uint32 ench_id) const;
 
-    [[nodiscard]] const std::vector<int32>* GetSpellLinked(int32 spell_id) const;
+    [[nodiscard]] std::vector<int32> const* GetSpellLinked(int32 spell_id) const;
 
     [[nodiscard]] PetLevelupSpellSet const* GetPetLevelupSpellList(uint32 petFamily) const;
     [[nodiscard]] PetDefaultSpellsEntry const* GetPetDefaultSpellsEntry(int32 id) const;
@@ -775,6 +787,7 @@ public:
     void LoadSpellRequired();
     void LoadSpellLearnSkills();
     void LoadSpellTargetPositions();
+    void LoadSpellCones();
     void LoadSpellGroups();
     void LoadSpellGroupStackRules();
     void LoadSpellProcs();
@@ -807,10 +820,12 @@ private:
     SpellRequiredMap           mSpellReq;
     SpellLearnSkillMap         mSpellLearnSkills;
     SpellTargetPositionMap     mSpellTargetPositions;
+    SpellConeMap               mSpellCones;
     SpellSpellGroupMap         mSpellSpellGroup;
     SpellGroupSpellMap         mSpellGroupSpell;
     SpellGroupStackMap         mSpellGroupStack;
     SameEffectStackMap         mSpellSameEffectStack;
+    SameEffectStackSharedMiscMap mSpellSameEffectSharedMisc;
     SpellProcMap               mSpellProcMap;
     CreatureImmunitiesMap      mCreatureImmunities;
     SpellBonusMap              mSpellBonusMap;

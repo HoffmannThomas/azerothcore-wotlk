@@ -1103,6 +1103,49 @@ TEST_F(CombatManagerIntegrationTest, CanBeginCombat_ValidUnits_Succeeds)
     EXPECT_TRUE(CombatManager::CanBeginCombat(_creatureA, _creatureB));
 }
 
+// Asymmetric factions: A is hostile to the target, but the target's faction still considers A
+// friendly (e.g. Dragonblight Mage Hunters vs Moonrest Highborne). The aggressor's hostility must
+// win so combat can begin.
+TEST_F(CombatManagerIntegrationTest, CanBeginCombat_AsymmetricHostileVsFriendly_Succeeds)
+{
+    auto* factionC = new FactionTemplateEntry{};
+    factionC->ID = 90003;
+    factionC->faction = 90003;
+    factionC->factionFlags = 0;
+    factionC->ourMask = 2;       // A (hostileMask=2) is hostile to this group...
+    factionC->friendlyMask = 1;  // ...but this faction considers A's group (ourMask=1) friendly
+    factionC->hostileMask = 0;
+    for (auto& e : factionC->enemyFaction) e = 0;
+    for (auto& f : factionC->friendFaction) f = 0;
+    sFactionTemplateStore.SetEntry(90003, factionC);
+
+    _creatureB->SetFaction(90003);
+    ASSERT_TRUE(_creatureA->IsHostileTo(_creatureB));
+    ASSERT_TRUE(_creatureB->IsFriendlyTo(_creatureA));
+    EXPECT_TRUE(CombatManager::CanBeginCombat(_creatureA, _creatureB));
+}
+
+// One side friendly and neither side hostile: combat must still be blocked so neutral/friendly
+// bystanders are not dragged into combat.
+TEST_F(CombatManagerIntegrationTest, CanBeginCombat_FriendlyWithoutHostility_Fails)
+{
+    auto* factionD = new FactionTemplateEntry{};
+    factionD->ID = 90004;
+    factionD->faction = 90004;
+    factionD->factionFlags = 0;
+    factionD->ourMask = 4;       // A (hostileMask=2) is NOT hostile to this group...
+    factionD->friendlyMask = 1;  // ...and this faction considers A's group friendly
+    factionD->hostileMask = 0;
+    for (auto& e : factionD->enemyFaction) e = 0;
+    for (auto& f : factionD->friendFaction) f = 0;
+    sFactionTemplateStore.SetEntry(90004, factionD);
+
+    _creatureB->SetFaction(90004);
+    ASSERT_FALSE(_creatureA->IsHostileTo(_creatureB));
+    ASSERT_FALSE(_creatureB->IsHostileTo(_creatureA));
+    EXPECT_FALSE(CombatManager::CanBeginCombat(_creatureA, _creatureB));
+}
+
 // ============================================================================
 // GAP COVERAGE: CombatManager::IsInCombatWith (ObjectGuid variant)
 // ============================================================================
@@ -1317,6 +1360,158 @@ TEST_F(CombatManagerIntegrationTest, SetEvadeState_SameState_DoesNotClearTimer)
     EXPECT_TRUE(cm.IsInEvadeMode());
 
     cm.StopEvade();
+}
+
+// ============================================================================
+// PvP combat after death (#27967)
+// The victim leaves combat at death; its enemies keep the PvP reference and
+// leave combat a full PVP_COMBAT_TIMEOUT after the death.
+// ============================================================================
+
+class CombatManagerPvPDeathTest : public CombatManagerIntegrationTest
+{
+protected:
+    void SetUp() override
+    {
+        CombatManagerIntegrationTest::SetUp();
+        _creatureA->SetControlledByPlayer(true);
+        _creatureB->SetControlledByPlayer(true);
+    }
+
+    // what Unit::setDeathState does to the combat state of a dying unit
+    static void Die(TestCreature* unit)
+    {
+        unit->SetAlive(false);
+        unit->TestGetCombatMgr().RestartPvPCombatTimers();
+        unit->TestGetCombatMgr().SuppressPvPCombat();
+    }
+};
+
+TEST_F(CombatManagerPvPDeathTest, SetInCombatWith_PlayerControlled_CreatesPvPRef)
+{
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB));
+
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().HasPvPCombat());
+    EXPECT_TRUE(_creatureB->TestGetCombatMgr().HasPvPCombat());
+    EXPECT_FALSE(_creatureA->TestGetCombatMgr().HasPvECombat());
+    EXPECT_FALSE(_creatureB->TestGetCombatMgr().HasPvECombat());
+}
+
+TEST_F(CombatManagerPvPDeathTest, VictimLeavesCombat_KillerStays)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+
+    Die(_creatureB);
+
+    EXPECT_FALSE(_creatureB->IsInCombat());
+    EXPECT_FALSE(_creatureB->TestGetCombatMgr().HasCombat());
+    EXPECT_TRUE(_creatureA->IsInCombat());
+    // the reference itself is kept until the timer runs out
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().IsInCombatWith(_creatureB));
+    EXPECT_TRUE(_creatureB->TestGetCombatMgr().IsInCombatWith(_creatureA));
+}
+
+TEST_F(CombatManagerPvPDeathTest, KillerGetsFullTimeoutFromDeath)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+    _creatureA->TestGetCombatMgr().Update(PvPCombatReference::PVP_COMBAT_TIMEOUT - 1000);
+
+    Die(_creatureB);
+
+    _creatureA->TestGetCombatMgr().Update(PvPCombatReference::PVP_COMBAT_TIMEOUT - 1);
+    EXPECT_TRUE(_creatureA->IsInCombat());
+
+    _creatureA->TestGetCombatMgr().Update(1);
+    EXPECT_FALSE(_creatureA->IsInCombat());
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().GetPvPCombatRefs().empty());
+    EXPECT_TRUE(_creatureB->TestGetCombatMgr().GetPvPCombatRefs().empty());
+}
+
+TEST_F(CombatManagerPvPDeathTest, VictimIsFirst_TimerStillTicks)
+{
+    // B starts the fight, so only B's manager ticks the reference timer
+    _creatureB->TestGetCombatMgr().SetInCombatWith(_creatureA);
+
+    Die(_creatureB);
+    EXPECT_TRUE(_creatureA->IsInCombat());
+
+    _creatureB->TestGetCombatMgr().Update(PvPCombatReference::PVP_COMBAT_TIMEOUT);
+    EXPECT_FALSE(_creatureA->IsInCombat());
+    EXPECT_FALSE(_creatureA->TestGetCombatMgr().HasCombat());
+}
+
+TEST_F(CombatManagerPvPDeathTest, OtherEnemyKeepsKillerInCombat)
+{
+    TestCreature* creatureC = new TestCreature();
+    creatureC->SetupForCombatTest(_map, 3, 12347);
+    creatureC->SetFaction(90002);
+    creatureC->SetControlledByPlayer(true);
+
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+    _creatureA->TestGetCombatMgr().SetInCombatWith(creatureC);
+
+    Die(_creatureB);
+    _creatureA->TestGetCombatMgr().Update(PvPCombatReference::PVP_COMBAT_TIMEOUT - 1000);
+    // keep the fight with C going while B's timeout runs out
+    _creatureA->TestGetCombatMgr().SetInCombatWith(creatureC);
+    _creatureA->TestGetCombatMgr().Update(1000);
+
+    EXPECT_FALSE(_creatureA->TestGetCombatMgr().IsInCombatWith(_creatureB));
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().IsInCombatWith(creatureC));
+    EXPECT_TRUE(_creatureA->IsInCombat());
+
+    creatureC->CleanupCombatState();
+    delete creatureC;
+}
+
+TEST_F(CombatManagerPvPDeathTest, SetInCombatWithDeadUnit_DoesNotRefreshOrUnsuppress)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+    Die(_creatureB);
+
+    _creatureA->TestGetCombatMgr().Update(PvPCombatReference::PVP_COMBAT_TIMEOUT - 1000);
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB));
+    EXPECT_FALSE(_creatureB->IsInCombat());
+
+    // the timer was not refreshed by the call above
+    _creatureA->TestGetCombatMgr().Update(1000);
+    EXPECT_FALSE(_creatureA->IsInCombat());
+    EXPECT_FALSE(_creatureA->TestGetCombatMgr().IsInCombatWith(_creatureB));
+}
+
+TEST_F(CombatManagerPvPDeathTest, ResurrectedVictim_NotInCombatUntilNewInteraction)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+    Die(_creatureB);
+
+    _creatureB->SetAlive(true);
+    EXPECT_FALSE(_creatureB->IsInCombat());
+
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+    EXPECT_TRUE(_creatureB->IsInCombat());
+}
+
+TEST_F(CombatManagerPvPDeathTest, ClearInCombat_KeepPvPForOthers_OnlyOwnerLeaves)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+
+    _creatureB->ClearInCombat(/*keepPvPForOthers*/ true);
+
+    EXPECT_FALSE(_creatureB->IsInCombat());
+    EXPECT_TRUE(_creatureA->IsInCombat());
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().IsInCombatWith(_creatureB));
+}
+
+TEST_F(CombatManagerPvPDeathTest, ClearInCombat_Default_EndsPvPOnBothSides)
+{
+    _creatureA->TestGetCombatMgr().SetInCombatWith(_creatureB);
+
+    _creatureB->ClearInCombat();
+
+    EXPECT_FALSE(_creatureB->IsInCombat());
+    EXPECT_FALSE(_creatureA->IsInCombat());
+    EXPECT_TRUE(_creatureA->TestGetCombatMgr().GetPvPCombatRefs().empty());
+    EXPECT_TRUE(_creatureB->TestGetCombatMgr().GetPvPCombatRefs().empty());
 }
 
 } // namespace

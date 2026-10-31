@@ -24,6 +24,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "World.h"
 
 void UnitAI::AttackStart(Unit* victim)
 {
@@ -39,7 +40,7 @@ void UnitAI::AttackStartCaster(Unit* victim, float dist)
 
 void UnitAI::DoMeleeAttackIfReady()
 {
-    if (me->HasUnitState(UNIT_STATE_CASTING))
+    if (me->IsActionPreventedByCasting())
         return;
 
     Unit* victim = me->GetVictim();
@@ -50,23 +51,19 @@ void UnitAI::DoMeleeAttackIfReady()
         return;
 
     //Make sure our attack is ready and we aren't currently casting before checking distance
+    bool mainHandSwung = false;
+
     if (me->isAttackReady())
     {
-        // xinef: prevent base and off attack in same time, delay attack at 0.2 sec
-        if (me->HasOffhandWeaponForAttack())
-            if (me->getAttackTimer(OFF_ATTACK) < ATTACK_DISPLAY_DELAY)
-                me->setAttackTimer(OFF_ATTACK, ATTACK_DISPLAY_DELAY);
-
         me->AttackerStateUpdate(victim);
         me->resetAttackTimer();
+
+        mainHandSwung = true;
     }
 
-    if (me->HasOffhandWeaponForAttack() && me->isAttackReady(OFF_ATTACK))
+    // The client draws one swing animation per frame, so let the main hand swing alone
+    if (me->HasOffhandWeaponForAttack() && me->isAttackReady(OFF_ATTACK) && !mainHandSwung)
     {
-        // xinef: delay main hand attack if both will hit at the same time (players code)
-        if (me->getAttackTimer(BASE_ATTACK) < ATTACK_DISPLAY_DELAY)
-            me->setAttackTimer(BASE_ATTACK, ATTACK_DISPLAY_DELAY);
-
         me->AttackerStateUpdate(victim, OFF_ATTACK);
         me->resetAttackTimer(OFF_ATTACK);
     }
@@ -74,7 +71,7 @@ void UnitAI::DoMeleeAttackIfReady()
 
 bool UnitAI::DoSpellAttackIfReady(uint32 spell)
 {
-    if (me->HasUnitState(UNIT_STATE_CASTING) || !me->isAttackReady())
+    if (me->IsActionPreventedByCasting() || !me->isAttackReady())
         return true;
 
     if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell))
@@ -92,7 +89,7 @@ bool UnitAI::DoSpellAttackIfReady(uint32 spell)
 
 void UnitAI::DoSpellAttackToRandomTargetIfReady(uint32 spell, uint32 threatTablePosition /*= 0*/, float dist /*= 0.f*/, bool playerOnly /*= true*/)
 {
-    if (me->HasUnitState(UNIT_STATE_CASTING) || !me->isAttackReady())
+    if (me->IsActionPreventedByCasting() || !me->isAttackReady())
         return;
 
     if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell))
@@ -268,7 +265,7 @@ SpellCastResult UnitAI::DoCast(Unit* victim, uint32 spellId, bool triggered)
     if (!victim)
         return SPELL_FAILED_BAD_TARGETS;
 
-    if (me->HasUnitState(UNIT_STATE_CASTING) && !triggered)
+    if (me->IsActionPreventedByCasting() && !triggered)
         return SPELL_FAILED_SPELL_IN_PROGRESS;
 
     return me->CastSpell(victim, spellId, triggered);
@@ -284,7 +281,7 @@ SpellCastResult UnitAI::DoCastVictim(uint32 spellId, bool triggered)
 
 SpellCastResult UnitAI::DoCastAOE(uint32 spellId, bool triggered)
 {
-    if (!triggered && me->HasUnitState(UNIT_STATE_CASTING))
+    if (!triggered && me->IsActionPreventedByCasting())
         return SPELL_FAILED_SPELL_IN_PROGRESS;
 
     return me->CastSpell((Unit*)nullptr, spellId, triggered);
@@ -292,10 +289,14 @@ SpellCastResult UnitAI::DoCastAOE(uint32 spellId, bool triggered)
 
 /**
  * @brief Cast the spell on a random unit from the threat list
+ *
+ * @param aura Optional aura filter forwarded to SelectTarget: a positive value
+ *             requires the aura on the target, a negative value excludes targets
+ *             that already have it.
  */
-SpellCastResult UnitAI::DoCastRandomTarget(uint32 spellId, uint32 threatTablePosition, float dist, bool playerOnly, bool triggered, bool withTank)
+SpellCastResult UnitAI::DoCastRandomTarget(uint32 spellId, uint32 threatTablePosition, float dist, bool playerOnly, bool triggered, bool withTank, int32 aura)
 {
-    if (Unit* target = SelectTarget(SelectTargetMethod::Random, threatTablePosition, dist, playerOnly, withTank))
+    if (Unit* target = SelectTarget(SelectTargetMethod::Random, threatTablePosition, dist, playerOnly, withTank, aura))
     {
         return DoCast(target, spellId, triggered);
     }
@@ -406,6 +407,26 @@ void UnitAI::EvadeTimerExpired()
             {
                 creature->SetCannotReachTarget();
                 return;
+            }
+        }
+    }
+
+    // Retail-like: instance trash teleports to its unreachable target instead of evading
+    if (sWorld->getBoolConfig(CONFIG_CREATURE_INSTANCE_TELEPORT_TO_UNREACHABLE_TARGET)
+        && creature->GetMap()->IsDungeon()
+        && !creature->IsDungeonBoss() && !creature->isWorldBoss()
+        && !creature->IsControlledByPlayer())
+    {
+        if (ObjectGuid targetGuid = creature->GetCannotReachTarget())
+        {
+            if (Unit* target = ObjectAccessor::GetUnit(*creature, targetGuid))
+            {
+                if (target->IsAlive() && creature->IsEngagedBy(target))
+                {
+                    creature->NearTeleportTo(target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), target->GetOrientation());
+                    creature->SetCannotReachTarget();
+                    return;
+                }
             }
         }
     }

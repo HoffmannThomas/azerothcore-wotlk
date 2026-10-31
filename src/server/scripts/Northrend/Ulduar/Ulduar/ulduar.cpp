@@ -64,7 +64,6 @@ enum UldActions
 
 enum UldNPCs
 {
-    NPC_WINTER_JORMUNGAR        = 34137,
     NPC_SNOW_MOUND_4            = 34146,
     NPC_SNOW_MOUND_6            = 34150,
     NPC_SNOW_MOUND_8            = 34151
@@ -77,9 +76,10 @@ enum UldGameObjects
 
 enum UldSpells
 {
-    SPELL_SIMPLE_TELEPORT       = 12980,
     SPELL_KEEPER_TELEPORT       = 62940,
+    SPELL_ANCHOR_HERE           = 45313,
     SPELL_SNOW_MOUND_PARTICLES  = 64615,
+    SPELL_EJECT_PASSENGER_1     = 64629,
     SPELL_ENERGY_SAP_10         = 64740,
 
     // Arachnopod Destroyer
@@ -100,7 +100,7 @@ public:
         {
             scheduler.Schedule(250ms, [this](TaskContext /*context*/)
             {
-                DoCastSelf(SPELL_SIMPLE_TELEPORT);
+                DoCastSelf(SPELL_SIMPLE_TELEPORT_VISUAL);
             });
         }
 
@@ -239,6 +239,33 @@ class spell_ulduar_energy_sap_aura : public AuraScript
     }
 };
 
+// 61906 - Random Aggro Periodic (5 sec)
+class spell_ulduar_random_aggro_periodic : public AuraScript
+{
+    PrepareAuraScript(spell_ulduar_random_aggro_periodic);
+
+    void HandleEffectPeriodic(AuraEffect const* /*aurEff*/)
+    {
+        Unit* target = GetTarget();
+        target->GetThreatMgr().ResetAllThreat();
+
+        Creature* creature = target->ToCreature();
+        if (!creature || !creature->IsAIEnabled)
+            return;
+
+        if (Unit* victim = creature->AI()->SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+        {
+            creature->AddThreat(victim, 3000000.0f);
+            creature->AI()->AttackStart(victim);
+        }
+    }
+
+    void Register() override
+    {
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_ulduar_random_aggro_periodic::HandleEffectPeriodic, EFFECT_0, SPELL_AURA_PERIODIC_DUMMY);
+    }
+};
+
 struct npc_ulduar_snow_mound : public ScriptedAI
 {
     npc_ulduar_snow_mound(Creature* creature) : ScriptedAI(creature)
@@ -279,20 +306,32 @@ struct npc_ulduar_snow_mound : public ScriptedAI
 
                 _scheduler.Schedule(0s, [this](TaskContext context)
                 {
-                    _counter++;
-                    float a = rand_norm() * 2 * M_PI; //needs verification from sniffs
-                    float d = rand_norm() * 4.0f;
-                    if (Creature* jormungar = me->SummonCreature(NPC_WINTER_JORMUNGAR, me->GetPositionX() + cos(a) * d, me->GetPositionY() + std::sin(a) * d, me->GetPositionZ() + 1.0f, 0.0f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 300000))
-                    {
-                        jormungar->SetInCombatWithZone();
-                    }
-                    if (_counter < _count)
-                    {
-                        context.Repeat(2s);
-                    }
+                    DoCastSelf(SPELL_EJECT_PASSENGER_1 + _counter, true);
+                    if (++_counter < _count)
+                        context.Repeat(3200ms);
                 });
             }
         }
+    }
+
+    void PassengerBoarded(Unit* passenger, int8 /*seatId*/, bool apply) override
+    {
+        passenger->SetImmuneToPC(apply);
+        if (apply)
+            return;
+
+        ObjectGuid const wormGUID = passenger->GetGUID();
+        _scheduler.Schedule(1500ms, [this, wormGUID](TaskContext /*context*/)
+        {
+            Creature* worm = ObjectAccessor::GetCreature(*me, wormGUID);
+            if (!worm || !worm->IsAlive())
+                return;
+
+            // Anchor Here has no effect handler in AC, so the home position is set here
+            worm->SetHomePosition(worm->GetPosition());
+            worm->CastSpell(worm, SPELL_ANCHOR_HERE, true);
+            worm->SetInCombatWithZone();
+        });
     }
 
     void UpdateAI(uint32 diff) override
@@ -523,31 +562,43 @@ public:
     }
 };
 
+enum SalvagedSiegeEngineSeats
+{
+    SEAT_SIEGE_ENGINE_DRIVER            = 0,
+    SEAT_SIEGE_ENGINE_TURRET            = 7
+};
+
 struct npc_salvaged_siege_engine : public VehicleAI
 {
     npc_salvaged_siege_engine(Creature* creature) : VehicleAI(creature) { }
 
     bool BeforeSpellClick(Unit* clicker) override
     {
-        if (Vehicle* vehicle = me->GetVehicleKit())
+        Vehicle* vehicle = me->GetVehicleKit();
+        if (!vehicle)
+            return true;
+
+        // The driver seat is the only one a spell click may fill directly.
+        if (vehicle->HasEmptySeat(SEAT_SIEGE_ENGINE_DRIVER))
+            return true;
+
+        // Someone is already driving: send the clicker to the turret while it is still free.
+        if (Unit* turret = vehicle->GetPassenger(SEAT_SIEGE_ENGINE_TURRET))
         {
-            if (vehicle->IsVehicleInUse())
+            if (Vehicle* turretVehicle = turret->GetVehicleKit())
             {
-                if (Unit* turret = vehicle->GetPassenger(7))
+                if (!turretVehicle->IsVehicleInUse())
                 {
-                    if (Vehicle* turretVehicle = turret->GetVehicleKit())
-                    {
-                        if (!turretVehicle->IsVehicleInUse())
-                        {
-                            turret->HandleSpellClick(clicker);
-                            return false;
-                        }
-                    }
+                    turret->HandleSpellClick(clicker);
+                    return false;
                 }
             }
         }
 
-        return true;
+        // Driver and turret are both manned. The two remaining seats (VehicleSeat.dbc 4026 and 4027)
+        // lack VEHICLE_SEAT_FLAG_CAN_ENTER_OR_EXIT, so the client never draws the Leave Vehicle button
+        // and whoever boards one can no longer get off. They cannot be used on retail either.
+        return false;
     }
 };
 
@@ -590,6 +641,7 @@ void AddSC_ulduar()
     new npc_ulduar_keeper();
     RegisterSpellScript(spell_ulduar_teleporter);
     RegisterSpellScript(spell_ulduar_energy_sap_aura);
+    RegisterSpellScript(spell_ulduar_random_aggro_periodic);
     RegisterUlduarCreatureAI(npc_ulduar_snow_mound);
     RegisterUlduarCreatureAI(npc_ulduar_storm_tempered_keeper);
     RegisterUlduarCreatureAI(npc_ulduar_arachnopod_destroyer);

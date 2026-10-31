@@ -49,6 +49,7 @@ enum KologarnSpells
     SPELL_ONEARMED_OVERHEAD_SMASH       = 63573,
     SPELL_PETRIFYING_BREATH             = 62030,
     SPELL_STONE_SHOUT                   = 63716,
+    SPELL_BERSERK                       = 64238,
 
     // EYEBEAM
     SPELL_FOCUSED_EYEBEAM_SUMMON        = 63342,
@@ -82,6 +83,7 @@ enum KologarnEvents
     EVENT_FOCUSED_EYEBEAM               = 6,
     EVENT_STONE_SHOUT                   = 7,
     EVENT_PREPARE_BREATH                = 8, // Kologarn can't cast breath on pull
+    EVENT_ENRAGE                        = 9,
 };
 
 enum KologarnNPCs
@@ -146,53 +148,16 @@ struct boss_kologarn : public BossAI
                 BossAI::MoveInLineOfSight(who);
         }
 
-        void EnterEvadeMode(EvadeReason why) override
-        {
-            if (!CreatureAI::_EnterEvadeMode(why))
-                return;
-            if (instance && instance->GetBossState(BOSS_KOLOGARN) != DONE)
-            {
-                instance->SetBossState(BOSS_KOLOGARN, NOT_STARTED);
-                instance->SaveToDB();
-            }
-            Reset();
-            me->setActive(false);
-        }
-
         void AttachLeftArm()
         {
-            if (Unit* arm = ObjectAccessor::GetCreature(*me, _left))
-                arm->SetHealth(arm->GetMaxHealth());
-            else if (Creature* accessory = me->SummonCreature(NPC_LEFT_ARM, *me, TEMPSUMMON_MANUAL_DESPAWN))
-            {
-                accessory->AddUnitTypeMask(UNIT_MASK_ACCESSORY);
-                if (!me->HandleSpellClick(accessory, 0))
-                    accessory->DespawnOrUnsummon();
-                else
-                {
-                    _left = accessory->GetGUID();
-                    accessory->SetOrientation(M_PI);
-                    accessory->CastSpell(accessory, SPELL_ARM_RESPAWN_VISUAL, true);
-                }
-            }
+            if (!ObjectAccessor::GetCreature(*me, _left))
+                vehicle->InstallAccessory(NPC_LEFT_ARM, 0, true, TEMPSUMMON_MANUAL_DESPAWN, 0);
         }
 
         void AttachRightArm()
         {
-            if (Unit* arm = ObjectAccessor::GetCreature(*me, _right))
-                arm->SetHealth(arm->GetMaxHealth());
-            else if (Creature* accessory = me->SummonCreature(NPC_RIGHT_ARM, *me, TEMPSUMMON_MANUAL_DESPAWN))
-            {
-                accessory->AddUnitTypeMask(UNIT_MASK_ACCESSORY);
-                if (!me->HandleSpellClick(accessory, 1))
-                    accessory->DespawnOrUnsummon();
-                else
-                {
-                    _right = accessory->GetGUID();
-                    accessory->SetOrientation(M_PI);
-                    accessory->CastSpell(accessory, SPELL_ARM_RESPAWN_VISUAL, true);
-                }
-            }
+            if (!ObjectAccessor::GetCreature(*me, _right))
+                vehicle->InstallAccessory(NPC_RIGHT_ARM, 1, true, TEMPSUMMON_MANUAL_DESPAWN, 0);
         }
 
         void Reset() override
@@ -203,18 +168,9 @@ struct boss_kologarn : public BossAI
             me->GetMotionMaster()->MoveTargetedHome();
             me->SetDisableGravity(true);
             me->DisableRotate(true);
+            me->SetCorpseDelay(7 * DAY);
 
             _Reset();
-
-            if (instance)
-            {
-                // Open the door inside Kologarn chamber
-                if (GameObject* door = instance->GetGameObject(DATA_KOLOGARN_DOORS))
-                    door->SetGoState(GO_STATE_ACTIVE);
-            }
-
-            AttachLeftArm();
-            AttachRightArm();
 
             // Reset breath on pull
             breathReady = false;
@@ -257,37 +213,12 @@ struct boss_kologarn : public BossAI
                 BossAI::JustSummoned(cr);
         }
 
-        void SummonedCreatureDespawn(Creature* cr) override
-        {
-            if (instance->GetBossState(BOSS_KOLOGARN) > NOT_STARTED)
-                return;
-
-            if (cr->GetEntry() == NPC_LEFT_ARM)
-            {
-                _left.Clear();
-                AttachLeftArm();
-            }
-
-            if (cr->GetEntry() == NPC_RIGHT_ARM)
-            {
-                _right.Clear();
-                AttachRightArm();
-            }
-        }
-
         void JustDied(Unit*) override
         {
             _JustDied();
             me->StopMoving();
 
             Talk(SAY_DEATH);
-
-            if (instance)
-            {
-                // Open the door inside Kologarn chamber
-                if (GameObject* door = instance->GetGameObject(DATA_KOLOGARN_DOORS))
-                    door->SetGoState(GO_STATE_ACTIVE);
-            }
 
             if (GameObject* bridge = me->FindNearestGameObject(GO_KOLOGARN_BRIDGE, 100))
                 bridge->SetGoState(GO_STATE_READY);
@@ -306,6 +237,8 @@ struct boss_kologarn : public BossAI
                 arm->DespawnOrUnsummon(3s); // visual
             me->SetUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
             me->SetDisableGravity(true);
+            me->SetCorpseDelay(7 * DAY);
+            me->SetCorpseRemoveTime(7 * DAY);
         }
 
         void KilledUnit(Unit*) override
@@ -318,35 +251,46 @@ struct boss_kologarn : public BossAI
 
         void PassengerBoarded(Unit* who, int8  /*seatId*/, bool apply) override
         {
+            if (apply)
+            {
+                if (who->GetEntry() == NPC_LEFT_ARM)
+                    _left = who->GetGUID();
+                else if (who->GetEntry() == NPC_RIGHT_ARM)
+                    _right = who->GetGUID();
+                else
+                    return;
+
+                who->SetOrientation(M_PI);
+                who->CastSpell(who, SPELL_ARM_RESPAWN_VISUAL, true);
+                return;
+            }
+
             if (!me->IsAlive() || instance->GetBossState(BOSS_KOLOGARN) != IN_PROGRESS)
                 return;
 
-            if (!apply)
+            // left arm
+            if (who->GetGUID() == _left)
             {
-                // left arm
-                if (who->GetGUID() == _left)
+                _left.Clear();
+                if (me->IsInCombat())
                 {
-                    _left.Clear();
-                    if (me->IsInCombat())
-                    {
-                        Talk(SAY_LEFT_ARM_GONE);
-                        events.ScheduleEvent(EVENT_RESTORE_ARM_LEFT, 50s);
-                    }
+                    Talk(SAY_LEFT_ARM_GONE);
+                    events.ScheduleEvent(EVENT_RESTORE_ARM_LEFT, 50s);
                 }
-                else
-                {
-                    _right.Clear();
-                    if (me->IsInCombat())
-                    {
-                        Talk(SAY_RIGHT_ARM_GONE);
-                        events.ScheduleEvent(EVENT_RESTORE_ARM_RIGHT, 50s);
-                    }
-                }
-
-                me->CastSpell(me, SPELL_ARM_DEAD, true);
-                if (!_right && !_left)
-                    events.ScheduleEvent(EVENT_STONE_SHOUT, 5s);
             }
+            else
+            {
+                _right.Clear();
+                if (me->IsInCombat())
+                {
+                    Talk(SAY_RIGHT_ARM_GONE);
+                    events.ScheduleEvent(EVENT_RESTORE_ARM_RIGHT, 50s);
+                }
+            }
+
+            me->CastSpell(me, SPELL_ARM_DEAD, true);
+            if (!_right && !_left)
+                events.ScheduleEvent(EVENT_STONE_SHOUT, 5s);
         }
 
         void DamageTaken(Unit* who, uint32& damage, DamageEffectType, SpellSchoolMask) override
@@ -368,19 +312,10 @@ struct boss_kologarn : public BossAI
             events.ScheduleEvent(EVENT_GRIP, 15s);
             events.ScheduleEvent(EVENT_FOCUSED_EYEBEAM, 10s);
             events.ScheduleEvent(EVENT_PREPARE_BREATH, 3s);
-            //events.ScheduleEvent(EVENT_ENRAGE, x); no info
+            events.ScheduleEvent(EVENT_ENRAGE, 8min);
 
             Talk(SAY_AGGRO);
             me->setActive(true);
-
-            // Close the door inside Kologarn chamber
-            if (instance)
-            {
-                if (GameObject* door = instance->GetGameObject(DATA_KOLOGARN_DOORS))
-                {
-                    door->SetGoState(GO_STATE_READY);
-                }
-            }
         }
 
         void UpdateAI(uint32 diff) override
@@ -441,7 +376,6 @@ struct boss_kologarn : public BossAI
                 {
                     events.ScheduleEvent(EVENT_FOCUSED_EYEBEAM, 20s);
                     me->CastSpell(me, SPELL_FOCUSED_EYEBEAM_SUMMON, false);
-                    Talk(EMOTE_EYES);
                     return;
                 }
                 case EVENT_RESTORE_ARM_LEFT:
@@ -451,6 +385,10 @@ struct boss_kologarn : public BossAI
                 case EVENT_RESTORE_ARM_RIGHT:
                     // shouldn't happen
                     AttachRightArm();
+                    return;
+                case EVENT_ENRAGE:
+                    DoCastSelf(SPELL_BERSERK, true);
+                    Talk(SAY_BERSERK);
                     return;
             }
 
@@ -603,9 +541,7 @@ struct boss_kologarn_eyebeam : public ScriptedAI
             me->GetMotionMaster()->MoveChase(player);
 
             if (Creature* cr = _instance->GetCreature(BOSS_KOLOGARN))
-            {
                 me->CastSpell(cr, me->GetEntry() == NPC_EYE_LEFT ? SPELL_FOCUSED_EYEBEAM_LEFT : SPELL_FOCUSED_EYEBEAM_RIGHT, true);
-            }
         }
     }
 
@@ -663,9 +599,21 @@ class spell_kologarn_focused_eyebeam : public SpellScript
         targets.push_back(*head);
     }
 
+    void HandleScriptEffect(SpellEffIndex effIndex)
+    {
+        PreventHitEffect(effIndex);
+        Player* target = GetHitPlayer();
+        Creature* creature = GetCaster()->ToCreature();
+        if (!target || !creature)
+            return;
+
+        creature->AI()->Talk(EMOTE_EYES, target);
+    }
+
     void Register() override
     {
         OnObjectAreaTargetSelect += SpellObjectAreaTargetSelectFn(spell_kologarn_focused_eyebeam::FilterTargetsInitial, EFFECT_ALL, TARGET_UNIT_SRC_AREA_ENEMY);
+        OnEffectHitTarget += SpellEffectFn(spell_kologarn_focused_eyebeam::HandleScriptEffect, EFFECT_2, SPELL_EFFECT_SCRIPT_EFFECT);
     }
 };
 
@@ -702,28 +650,6 @@ struct boss_kologarn_pit_kill_bunny : public NullCreatureAI
     }
 };
 
-// predicate function to select non main tank target
-class StoneGripTargetSelector
-{
-public:
-    StoneGripTargetSelector(Creature* me, Unit const* victim) : _me(me), _victim(victim) {}
-
-    bool operator() (WorldObject* target) const
-    {
-        if (target == _victim && _me->GetThreatMgr().GetThreatListSize() > 1)
-            return true;
-
-        if (!target->IsPlayer())
-            return true;
-
-        return false;
-    }
-
-private:
-    Creature* _me;
-    Unit const* _victim;
-};
-
 class spell_ulduar_stone_grip_cast_target : public SpellScript
 {
     PrepareSpellScript(spell_ulduar_stone_grip_cast_target);
@@ -735,18 +661,12 @@ class spell_ulduar_stone_grip_cast_target : public SpellScript
 
     void FilterTargetsInitial(std::list<WorldObject*>& targets)
     {
-        // Remove "main tank" and non-player targets
-        targets.remove_if(StoneGripTargetSelector(GetCaster()->ToCreature(), GetCaster()->GetVictim()));
-        // Maximum affected targets per difficulty mode
-        uint32 maxTargets = GetSpellInfo()->Id == SPELL_STONE_GRIP ? 1 : 3;
+        if (Unit* victim = GetCaster()->GetVictim())
+            targets.remove_if(Acore::ObjectGUIDCheck(victim->GetGUID(), true));
 
-        // Return a random amount of targets based on maxTargets
-        while (maxTargets < targets.size())
-        {
-            std::list<WorldObject*>::iterator itr = targets.begin();
-            advance(itr, urand(0, targets.size() - 1));
-            targets.erase(itr);
-        }
+        targets.remove_if(Acore::ObjectTypeIdCheck(TYPEID_PLAYER, false));
+
+        Acore::Containers::RandomResize(targets, GetSpellInfo()->Id == SPELL_STONE_GRIP ? 1 : 3);
     }
 
     void Register() override

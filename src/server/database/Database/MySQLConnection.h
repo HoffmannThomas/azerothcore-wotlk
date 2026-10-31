@@ -56,6 +56,7 @@ class AC_DATABASE_API MySQLConnection
 template <class T>
 friend class DatabaseWorkerPool;
 
+friend class ModuleDatabasePool;
 friend class PingOperation;
 
 public:
@@ -79,7 +80,7 @@ public:
     void RollbackTransaction();
     void CommitTransaction();
     int ExecuteTransaction(std::shared_ptr<TransactionBase> transaction);
-    std::size_t EscapeString(char* to, const char* from, std::size_t length);
+    std::size_t EscapeString(char* to, char const* from, std::size_t length);
     void Ping();
 
     uint32 GetLastError();
@@ -105,9 +106,14 @@ protected:
     PreparedStatementContainer m_stmts; //! PreparedStatements storage
     bool m_reconnecting;  //! Are we reconnecting?
     bool m_prepareError;  //! Was there any error while preparing statements?
+    bool m_inTransaction; //! Is a transaction open on this connection?
+    uint32 m_lostTransactionError; //! Error that lost the open transaction's connection, 0 if none
     MySQLHandle* m_Mysql; //! MySQL Handle.
 
 private:
+    int ExecuteTransactionAttempt(std::shared_ptr<TransactionBase> const& transaction, bool& lostBeforeCommit);
+    int AbortTransaction(std::size_t queryCount, bool& lostBeforeCommit);
+
     ProducerConsumerQueue<SQLOperation*>* m_queue;      //! Queue shared with other asynchronous connections.
     std::unique_ptr<DatabaseWorker> m_worker;           //! Core worker task.
     MySQLConnectionInfo& m_connectionInfo;              //! Connection info (used for logging)
